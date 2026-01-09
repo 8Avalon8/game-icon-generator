@@ -205,7 +205,16 @@ function bindEvents() {
     });
   }
 
-  if (elements.btnDownloadAllSlices) elements.btnDownloadAllSlices.addEventListener('click', handleDownloadAllSlices);
+  if (elements.btnDownloadAllSlices) {
+    elements.btnDownloadAllSlices.addEventListener('click', async () => {
+      try {
+        await handleDownloadAllSlices();
+      } catch (error) {
+        console.error('批量下载失败:', error);
+        showToast('批量下载失败', true);
+      }
+    });
+  }
 }
 
 // ============================================================================
