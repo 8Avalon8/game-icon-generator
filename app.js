@@ -111,7 +111,6 @@ function cacheDOM() {
     loader: document.getElementById('loader'),
     placeholderContent: document.querySelector('.placeholder-content'),
     btnDownloadFull: document.getElementById('btnDownloadFull'),
-    btnSetAsReference: document.getElementById('btnSetAsReference'),
 
     // 切片区域
     slicedSection: document.getElementById('slicedSection'),
@@ -320,11 +319,6 @@ function bindEvents() {
     });
   }
 
-  // 设为参考图
-  if (elements.btnSetAsReference) {
-    elements.btnSetAsReference.addEventListener('click', handleSetAsReference);
-  }
-
   // 下载
   if (elements.btnDownloadFull) {
     elements.btnDownloadFull.addEventListener('click', async () => {
@@ -399,11 +393,6 @@ function updateUI() {
     elements.btnGenerate.disabled = state.isGenerating || !isValid;
     const span = elements.btnGenerate.querySelector('span');
     if (span) span.textContent = state.isGenerating ? '正在生成...' : `✨ 开始生成 (${state.gridSize}x${state.gridSize})`;
-  }
-
-  // 设为参考图按钮状态
-  if (elements.btnSetAsReference) {
-    elements.btnSetAsReference.disabled = !state.resultImage;
   }
 }
 
@@ -519,19 +508,34 @@ function displayResult(fullImageBase64, slices) {
     item.innerHTML = `
       <img src="${getDataUrl(sliceBase64)}" loading="lazy">
       <div class="slice-actions">
-        <button class="icon-btn" title="下载此图标">
+        <button class="icon-btn download-btn" title="下载此图标">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
             <polyline points="7 10 12 15 17 10"></polyline>
             <line x1="12" y1="15" x2="12" y2="3"></line>
           </svg>
         </button>
+        <button class="icon-btn reference-btn" title="设为参考图">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 19l7-7 3 3-7 7-3-3z"></path>
+            <path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"></path>
+            <path d="M2 2l7.586 7.586"></path>
+            <circle cx="11" cy="11" r="2"></circle>
+          </svg>
+        </button>
       </div>
     `;
 
-    item.querySelector('button').addEventListener('click', async (e) => {
+    // 下载按钮
+    item.querySelector('.download-btn').addEventListener('click', async (e) => {
       e.stopPropagation();
       await downloadImage(sliceBase64, `icon-${index + 1}.png`);
+    });
+
+    // 设为参考图按钮
+    item.querySelector('.reference-btn').addEventListener('click', (e) => {
+      e.stopPropagation();
+      setImageAsReference(sliceBase64);
     });
 
     elements.slicedGrid.appendChild(item);
@@ -572,14 +576,6 @@ function setImageAsReference(imageBase64) {
   elements.uploadPlaceholder.style.display = 'none';
 
   showToast('已设置为参考图，当前模式：风格迁移', false);
-}
-
-/**
- * 设置当前显示的图像为风格迁移参考图
- */
-function handleSetAsReference() {
-  if (!state.resultImage) return;
-  setImageAsReference(state.resultImage);
 }
 
 // ============================================================================
