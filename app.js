@@ -75,6 +75,7 @@ function cacheDOM() {
     loader: document.getElementById('loader'),
     placeholderContent: document.querySelector('.placeholder-content'),
     btnDownloadFull: document.getElementById('btnDownloadFull'),
+    btnSetAsReference: document.getElementById('btnSetAsReference'),
 
     // 切片区域
     slicedSection: document.getElementById('slicedSection'),
@@ -188,6 +189,10 @@ function bindEvents() {
     });
   }
 
+  if (elements.btnSetAsReference) {
+    elements.btnSetAsReference.addEventListener('click', handleSetAsReference);
+  }
+
   if (elements.btnDownloadAllSlices) elements.btnDownloadAllSlices.addEventListener('click', handleDownloadAllSlices);
 }
 
@@ -209,6 +214,11 @@ function updateUI() {
     elements.btnGenerate.disabled = state.isGenerating || !isValid;
     const span = elements.btnGenerate.querySelector('span');
     if (span) span.textContent = state.isGenerating ? '正在生成...' : '✨ 开始生成';
+  }
+
+  // 设为参考图按钮状态
+  if (elements.btnSetAsReference) {
+    elements.btnSetAsReference.disabled = !state.resultImage;
   }
 }
 
@@ -348,6 +358,41 @@ function handleDownloadAllSlices() {
   showToast('正在开始批量下载...', false);
 }
 
+/**
+ * 设置图像为风格迁移参考图（通用函数）
+ * @param {string} imageBase64 - 要设置的图像 Base64 数据
+ */
+function setImageAsReference(imageBase64) {
+  if (!imageBase64) return;
+
+  // 设置为参考图
+  state.referenceImage = imageBase64;
+  
+  // 切换到风格迁移模式
+  state.mode = 'style';
+  
+  // 更新 UI
+  elements.tabs.forEach(t => t.classList.remove('active'));
+  const styleTab = Array.from(elements.tabs).find(t => t.dataset.mode === 'style');
+  if (styleTab) styleTab.classList.add('active');
+  
+  // 显示参考图预览
+  elements.uploadPreview.src = getDataUrl(imageBase64);
+  elements.uploadPreview.style.display = 'block';
+  elements.uploadPlaceholder.style.display = 'none';
+  
+  updateUI();
+  showToast('已设置为参考图，当前模式：风格迁移', false);
+}
+
+/**
+ * 设置当前显示的图像为风格迁移参考图
+ */
+function handleSetAsReference() {
+  if (!state.resultImage) return;
+  setImageAsReference(state.resultImage);
+}
+
 // ============================================================================
 // 历史记录
 // ============================================================================
@@ -405,8 +450,17 @@ function renderHistoryUI() {
     div.className = 'history-item';
     if (state.resultImage === item.resultImage) div.classList.add('active');
 
-    div.innerHTML = `<img src="${item.thumbnail}" title="${item.prompt}">`;
-    div.addEventListener('click', () => {
+    div.innerHTML = `
+      <img src="${item.thumbnail}" title="${item.prompt}">
+      <div class="history-actions">
+        <button class="history-btn view-btn">查看</button>
+        <button class="history-btn ref-btn">设为参考</button>
+      </div>
+    `;
+    
+    // 查看按钮
+    div.querySelector('.view-btn').addEventListener('click', (e) => {
+      e.stopPropagation();
       state.resultImage = item.resultImage;
       state.slices = item.slices;
       state.prompt = item.prompt;
@@ -417,6 +471,12 @@ function renderHistoryUI() {
 
       document.querySelectorAll('.history-item').forEach(el => el.classList.remove('active'));
       div.classList.add('active');
+    });
+    
+    // 设为参考图按钮
+    div.querySelector('.ref-btn').addEventListener('click', (e) => {
+      e.stopPropagation();
+      setImageAsReference(item.resultImage);
     });
 
     elements.historyList.appendChild(div);
