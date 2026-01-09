@@ -16,6 +16,12 @@ const BATCH_DOWNLOAD_DELAY_MS = 300;
 // 允许的下载尺寸选项
 const ALLOWED_DOWNLOAD_SIZES = ['original', '128', '256', '512'];
 
+// 允许的网格大小选项
+const ALLOWED_GRID_SIZES = [3, 5];
+
+// 默认网格大小
+const DEFAULT_GRID_SIZE = 3;
+
 // 历史记录存储相关常量
 const HISTORY_STORAGE_KEY = 'icon_history';
 const MAX_HISTORY = 8;
@@ -38,7 +44,7 @@ const state = {
   history: [],               // { id, timestamp, resultImage, slices, prompt, style, gridSize }
   downloadSize: 'original',  // 下载尺寸设置
   generateResolution: 1024,  // 生成分辨率 (1024/2048/4096)
-  gridSize: 3,               // 网格大小 (3 或 5)
+  gridSize: DEFAULT_GRID_SIZE, // 网格大小 (3 或 5)
 };
 
 // ============================================================================
@@ -180,7 +186,7 @@ function init() {
   const savedGridSize = localStorage.getItem('grid_size');
   if (savedGridSize) {
     const gridSize = parseInt(savedGridSize, 10);
-    if ([3, 5].includes(gridSize)) {
+    if (ALLOWED_GRID_SIZES.includes(gridSize)) {
       state.gridSize = gridSize;
     } else {
       localStorage.removeItem('grid_size');
@@ -301,7 +307,7 @@ function bindEvents() {
     elements.gridSizeSelect.addEventListener('change', (e) => {
       const newGridSize = parseInt(e.target.value, 10);
       // 验证选择的值是否有效
-      if ([3, 5].includes(newGridSize)) {
+      if (ALLOWED_GRID_SIZES.includes(newGridSize)) {
         state.gridSize = newGridSize;
         localStorage.setItem('grid_size', newGridSize.toString());
         updateUI();
@@ -722,7 +728,7 @@ function renderHistoryUI() {
       state.slices = item.slices;
       state.prompt = item.prompt;
       state.mode = item.mode;
-      state.gridSize = item.gridSize || 3; // 兼容旧记录，默认 3x3
+      state.gridSize = item.gridSize || DEFAULT_GRID_SIZE; // 兼容旧记录
       elements.promptInput.value = item.prompt;
       if (elements.gridSizeSelect) {
         elements.gridSizeSelect.value = state.gridSize.toString();
