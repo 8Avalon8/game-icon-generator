@@ -600,60 +600,54 @@ async function addToHistory(item) {
     slices: item.slices             // 完整保存到 localStorage
   };
 
-  try {
-    state.history.unshift(historyItem);
-    if (state.history.length > MAX_HISTORY) {
-      state.history.pop();
-    }
-    saveHistoryToStorage();
+  // 保存旧的历史记录以便在失败时恢复
+  const previousHistory = [...state.history];
+  
+  // 先添加新项
+  state.history.unshift(historyItem);
+  if (state.history.length > MAX_HISTORY) {
+    state.history.pop();
+  }
+
+  // 尝试保存
+  if (trySaveHistory()) {
     renderHistoryUI();
-  } catch (e) {
-    console.warn('存储空间已满，尝试清理旧记录:', e);
-    // 如果存储失败，先移除刚添加的项，然后逐步减少历史记录数量
-    state.history.shift(); // 移除刚才unshift添加的新项
+    return;
+  }
+
+  // 存储失败，尝试逐步减少旧记录
+  console.warn('存储空间已满，尝试清理旧记录');
+  
+  // 从保留全部旧记录开始，逐步减少
+  for (let itemsToKeep = previousHistory.length; itemsToKeep >= 0; itemsToKeep--) {
+    state.history = [historyItem, ...previousHistory.slice(0, itemsToKeep)];
     
-    let maxRetries = 3;
-    let itemsToKeep = Math.max(1, Math.floor(state.history.length / 2));
-
-    while (maxRetries > 0 && itemsToKeep > 0) {
-      try {
-        // 现在正确地重建数组：新项 + 保留的旧项
-        state.history = [historyItem, ...state.history.slice(0, itemsToKeep)];
-        saveHistoryToStorage();
-        renderHistoryUI();
-        showToast(`已保存，清理了部分旧记录（保留 ${state.history.length} 条）`, false);
-        return;
-      } catch (e2) {
-        itemsToKeep = Math.floor(itemsToKeep / 2);
-        maxRetries--;
-      }
-    }
-
-    // 如果还是失败，只保留当前这一条
-    try {
-      state.history = [historyItem];
-      saveHistoryToStorage();
+    if (trySaveHistory()) {
       renderHistoryUI();
-      showToast('存储空间不足，只保留了最新记录', true);
-    } catch (e3) {
-      console.error('无法保存历史记录:', e3);
-      showToast('存储空间不足，无法保存历史记录', true);
+      if (itemsToKeep < previousHistory.length) {
+        showToast(`已保存，清理了部分旧记录（保留 ${state.history.length} 条）`, false);
+      }
+      return;
     }
   }
+
+  // 如果只保存新项也失败了，尝试不保存完整图片数据
+  console.error('无法保存历史记录，存储空间严重不足');
+  state.history = [historyItem];
+  renderHistoryUI();
+  showToast('存储空间不足，历史记录可能无法持久保存', true);
 }
 
 /**
- * 保存历史记录到 localStorage
+ * 尝试保存历史记录，成功返回 true，失败返回 false
  */
-function saveHistoryToStorage() {
+function trySaveHistory() {
   try {
-    // 将完整的历史记录（包括图片数据）保存到 localStorage
     const historyData = JSON.stringify(state.history);
     localStorage.setItem(HISTORY_STORAGE_KEY, historyData);
+    return true;
   } catch (e) {
-    // 如果存储失败（可能超出配额），尝试只保留较少的历史记录
-    console.error('保存历史记录失败:', e);
-    throw e;
+    return false;
   }
 }
 
