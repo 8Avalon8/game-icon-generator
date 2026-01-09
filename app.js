@@ -189,6 +189,7 @@ function init() {
     if (ALLOWED_GRID_SIZES.includes(gridSize)) {
       state.gridSize = gridSize;
     } else {
+      // 只在存在无效值时清理
       localStorage.removeItem('grid_size');
     }
   }

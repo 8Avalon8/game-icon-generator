@@ -352,19 +352,19 @@
     /* 响应式调整 */
     @media (min-width: 1200px) {
       .sliced-grid.grid-3x3 {
-        grid-template-columns: repeat(9, 1fr); /* 桌面端：1行9列 */
+        grid-template-columns: repeat(9, 1fr); /* 桌面端：9列横向显示 */
       }
       .sliced-grid.grid-5x5 {
-        grid-template-columns: repeat(5, 1fr); /* 桌面端：5行5列 */
+        grid-template-columns: repeat(5, 1fr); /* 桌面端：5列显示（25图标分5行） */
       }
     }
 
     @media (max-width: 1199px) {
       .sliced-grid.grid-3x3 {
-        grid-template-columns: repeat(3, 1fr); /* 移动端：3x3网格 */
+        grid-template-columns: repeat(3, 1fr); /* 移动端：3列显示（9图标分3行） */
       }
       .sliced-grid.grid-5x5 {
-        grid-template-columns: repeat(3, 1fr); /* 移动端：3列自动折行 */
+        grid-template-columns: repeat(3, 1fr); /* 移动端：3列显示（25图标分多行） */
       }
     }
 
