@@ -37,6 +37,7 @@ const state = {
   isGenerating: false,
   history: [],               // { id, timestamp, resultImage, slices, prompt, style }
   downloadSize: 'original',  // 下载尺寸设置
+  generateResolution: 1024,  // 生成分辨率 (1024/2048/4096)
 };
 
 // ============================================================================
@@ -49,7 +50,7 @@ function cacheDOM() {
   elements = {
     // 版本显示
     versionDisplay: document.getElementById('versionDisplay'),
-    
+
     // 导航与设置
     btnSettings: document.getElementById('btnSettings'),
     btnCheckUpdate: document.getElementById('btnCheckUpdate'),
@@ -87,6 +88,9 @@ function cacheDOM() {
     // 下载尺寸选择
     downloadSizeSelect: document.getElementById('downloadSizeSelect'),
 
+    // 生成分辨率选择
+    generateResolutionSelect: document.getElementById('generateResolutionSelect'),
+
     // 历史记录
     historyList: document.getElementById('historyList'),
     btnClearHistory: document.getElementById('btnClearHistory'),
@@ -122,7 +126,7 @@ function init() {
   // 从 localStorage 恢复状态
   state.apiKey = localStorage.getItem('gemini_api_key') || '';
   state.baseUrl = localStorage.getItem('gemini_base_url') || '';
-  
+
   // 恢复下载尺寸设置，并验证是否为有效值
   const savedDownloadSize = localStorage.getItem('download_size');
   if (savedDownloadSize && ALLOWED_DOWNLOAD_SIZES.includes(savedDownloadSize)) {
@@ -150,6 +154,22 @@ function init() {
   // 恢复下载尺寸设置到 UI
   if (elements.downloadSizeSelect) {
     elements.downloadSizeSelect.value = state.downloadSize;
+  }
+
+  // 恢复生成分辨率设置
+  const savedResolution = localStorage.getItem('generate_resolution');
+  if (savedResolution) {
+    const resolution = parseInt(savedResolution, 10);
+    if ([1024, 2048, 4096].includes(resolution)) {
+      state.generateResolution = resolution;
+    } else {
+      localStorage.removeItem('generate_resolution');
+    }
+  }
+
+  // 恢复生成分辨率设置到 UI
+  if (elements.generateResolutionSelect) {
+    elements.generateResolutionSelect.value = state.generateResolution.toString();
   }
 
   // 更新 UI 状态，确保按钮状态正确
@@ -240,6 +260,22 @@ function bindEvents() {
     });
   }
 
+  // 生成分辨率选择
+  if (elements.generateResolutionSelect) {
+    elements.generateResolutionSelect.addEventListener('change', (e) => {
+      const newResolution = parseInt(e.target.value, 10);
+      // 验证选择的值是否有效
+      if ([1024, 2048, 4096].includes(newResolution)) {
+        state.generateResolution = newResolution;
+        localStorage.setItem('generate_resolution', newResolution.toString());
+      } else {
+        // 如果选择了无效值，恢复之前的值
+        console.warn('无效的生成分辨率选择:', newResolution);
+        elements.generateResolutionSelect.value = state.generateResolution.toString();
+      }
+    });
+  }
+
   // 设为参考图
   if (elements.btnSetAsReference) {
     elements.btnSetAsReference.addEventListener('click', handleSetAsReference);
@@ -296,12 +332,12 @@ async function loadAndDisplayVersion() {
  */
 function switchToMode(mode) {
   state.mode = mode;
-  
+
   // 更新标签页UI
   elements.tabs.forEach(t => t.classList.remove('active'));
   const targetTab = Array.from(elements.tabs).find(t => t.dataset.mode === mode);
   if (targetTab) targetTab.classList.add('active');
-  
+
   updateUI();
 }
 
@@ -376,9 +412,9 @@ async function handleGenerate() {
   try {
     let image;
     if (state.mode === 'text') {
-      image = await generateIconGrid(state.apiKey, state.prompt, state.style, state.baseUrl || undefined);
+      image = await generateIconGrid(state.apiKey, state.prompt, state.style, state.baseUrl || undefined, state.generateResolution);
     } else {
-      image = await generateIconGridWithReference(state.apiKey, state.referenceImage, state.prompt, state.baseUrl || undefined);
+      image = await generateIconGridWithReference(state.apiKey, state.referenceImage, state.prompt, state.baseUrl || undefined, state.generateResolution);
     }
 
     state.resultImage = image;
@@ -453,7 +489,7 @@ async function handleDownloadAllSlices() {
   if (!state.slices.length) return;
 
   showToast('正在开始批量下载...', false);
-  
+
   // 使用顺序下载以避免浏览器阻止
   for (let index = 0; index < state.slices.length; index++) {
     await downloadImage(state.slices[index], `icon-${index + 1}.png`);
@@ -473,15 +509,15 @@ function setImageAsReference(imageBase64) {
 
   // 设置为参考图
   state.referenceImage = imageBase64;
-  
+
   // 切换到风格迁移模式
   switchToMode('style');
-  
+
   // 显示参考图预览
   elements.uploadPreview.src = getDataUrl(imageBase64);
   elements.uploadPreview.style.display = 'block';
   elements.uploadPlaceholder.style.display = 'none';
-  
+
   showToast('已设置为参考图，当前模式：风格迁移', false);
 }
 
@@ -526,7 +562,7 @@ async function addToHistory(item) {
     // 如果存储失败，逐步减少历史记录数量
     let maxRetries = 3;
     let itemsToKeep = Math.max(1, Math.floor(state.history.length / 2));
-    
+
     while (maxRetries > 0 && itemsToKeep > 0) {
       try {
         state.history = [historyItem, ...state.history.slice(0, itemsToKeep - 1)];
@@ -539,7 +575,7 @@ async function addToHistory(item) {
         maxRetries--;
       }
     }
-    
+
     // 如果还是失败，只保留当前这一条
     try {
       state.history = [historyItem];
@@ -594,12 +630,12 @@ function handleClearHistory() {
   if (!confirm('确定要清除所有历史记录吗？此操作不可恢复。')) {
     return;
   }
-  
+
   try {
     state.history = [];
     localStorage.removeItem(HISTORY_STORAGE_KEY);
     renderHistoryUI();
-    
+
     // 清除当前显示的结果
     state.resultImage = null;
     state.slices = [];
@@ -608,7 +644,7 @@ function handleClearHistory() {
     elements.previewArea.classList.add('empty');
     elements.slicedSection.style.display = 'none';
     elements.btnDownloadFull.disabled = true;
-    
+
     showToast('历史记录已清除', false);
   } catch (e) {
     console.error('清除历史记录失败:', e);
@@ -632,7 +668,7 @@ function renderHistoryUI() {
         <button class="history-btn ref-btn">设为参考</button>
       </div>
     `;
-    
+
     // 查看按钮
     div.querySelector('.view-btn').addEventListener('click', (e) => {
       e.stopPropagation();
@@ -647,7 +683,7 @@ function renderHistoryUI() {
       document.querySelectorAll('.history-item').forEach(el => el.classList.remove('active'));
       div.classList.add('active');
     });
-    
+
     // 设为参考图按钮
     div.querySelector('.ref-btn').addEventListener('click', (e) => {
       e.stopPropagation();
@@ -742,7 +778,7 @@ function saveApiSettings() {
 
 async function downloadImage(base64, filename) {
   let imageToDownload = base64;
-  
+
   // 如果选择了特定尺寸（非原始尺寸），则调整图片大小
   if (state.downloadSize !== 'original') {
     const size = parseInt(state.downloadSize, 10);
@@ -755,7 +791,7 @@ async function downloadImage(base64, filename) {
       imageToDownload = base64;
     }
   }
-  
+
   const link = document.createElement('a');
   link.download = filename;
   link.href = getDataUrl(imageToDownload);
