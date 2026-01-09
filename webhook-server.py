@@ -130,6 +130,12 @@ class WebhookHandler(http.server.BaseHTTPRequestHandler):
                 'message': 'Webhook 服务器运行中',
                 'project_dir': PROJECT_DIR
             })
+        elif self.path == '/webhook':
+            # GitHub 添加 webhook 时会先用 GET 验证 URL 是否可达
+            self.send_json_response(200, {
+                'status': 'ok',
+                'message': 'Webhook 端点就绪，请使用 POST 方法发送事件'
+            })
         else:
             self.send_json_response(404, {'error': '未找到'})
     
