@@ -116,6 +116,20 @@ async function handleApiError(response) {
 }
 
 /**
+ * 将分辨率数值转换为 imageSize 格式
+ * @param {number} resolution - 分辨率 (1024/2048/4096)
+ * @returns {string} - imageSize 格式 ("1K"/"2K"/"4K")
+ */
+function getImageSize(resolution) {
+  const sizeMap = {
+    1024: '1K',
+    2048: '2K',
+    4096: '4K'
+  };
+  return sizeMap[resolution] || '1K';
+}
+
+/**
  * 生成图标网格图片（纯文字模式）
  * @param {string} apiKey - Gemini API Key
  * @param {string} prompt - 用户描述
@@ -143,6 +157,9 @@ export async function generateIconGrid(apiKey, prompt, style, baseUrl, resolutio
         }],
         generationConfig: {
           responseModalities: ['IMAGE', 'TEXT'],
+          imageConfig: {
+            imageSize: getImageSize(resolution)
+          }
         }
       }),
     }
@@ -195,6 +212,9 @@ export async function generateIconGridWithReference(apiKey, referenceImageBase64
         }],
         generationConfig: {
           responseModalities: ['IMAGE', 'TEXT'],
+          imageConfig: {
+            imageSize: getImageSize(resolution)
+          }
         }
       }),
     }
