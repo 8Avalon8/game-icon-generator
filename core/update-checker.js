@@ -97,12 +97,12 @@ export async function checkForUpdates() {
 /**
  * 更新应用（重新加载页面）
  */
-export function updateApp(newVersion) {
+export async function updateApp(newVersion) {
   // 保存新版本号
   saveCurrentVersion(newVersion);
   
   // 清除所有缓存
-  clearAllCaches();
+  await clearAllCaches();
   
   // 强制刷新页面（带时间戳）
   const timestamp = Date.now();
@@ -112,20 +112,16 @@ export function updateApp(newVersion) {
 /**
  * 清除所有缓存
  */
-export function clearAllCaches() {
+export async function clearAllCaches() {
   // 清除 Service Worker
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.getRegistrations().then(registrations => {
-      registrations.forEach(registration => registration.unregister());
-    });
+    const registrations = await navigator.serviceWorker.getRegistrations();
+    await Promise.all(registrations.map(reg => reg.unregister()));
   }
   
   // 清除浏览器缓存（如果支持 Cache API）
   if ('caches' in window) {
-    caches.keys().then(names => {
-      names.forEach(name => {
-        caches.delete(name);
-      });
-    });
+    const names = await caches.keys();
+    await Promise.all(names.map(name => caches.delete(name)));
   }
 }

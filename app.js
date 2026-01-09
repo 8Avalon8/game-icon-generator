@@ -522,14 +522,32 @@ async function addToHistory(item) {
     saveHistoryToStorage();
     renderHistoryUI();
   } catch (e) {
-    console.warn('存储空间已满，清理旧历史记录');
-    // 如果存储失败，可能是空间不足，只保留最新的一条
-    state.history = [historyItem];
+    console.warn('存储空间已满，尝试清理旧记录:', e);
+    // 如果存储失败，逐步减少历史记录数量
+    let maxRetries = 3;
+    let itemsToKeep = Math.max(1, Math.floor(state.history.length / 2));
+    
+    while (maxRetries > 0 && itemsToKeep > 0) {
+      try {
+        state.history = [historyItem, ...state.history.slice(0, itemsToKeep - 1)];
+        saveHistoryToStorage();
+        renderHistoryUI();
+        showToast(`已保存，清理了部分旧记录（保留 ${state.history.length} 条）`, false);
+        return;
+      } catch (e2) {
+        itemsToKeep = Math.floor(itemsToKeep / 2);
+        maxRetries--;
+      }
+    }
+    
+    // 如果还是失败，只保留当前这一条
     try {
+      state.history = [historyItem];
       saveHistoryToStorage();
       renderHistoryUI();
-    } catch (e2) {
-      console.error('无法保存历史记录:', e2);
+      showToast('存储空间不足，只保留了最新记录', true);
+    } catch (e3) {
+      console.error('无法保存历史记录:', e3);
       showToast('存储空间不足，无法保存历史记录', true);
     }
   }
