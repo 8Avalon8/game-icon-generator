@@ -433,6 +433,20 @@ async function handleGenerate() {
     return;
   }
 
+  // ========== 生成开始 - 输出当前状态 ==========
+  const generateStartTime = Date.now();
+  console.group('🎨 [图标生成] 开始生成');
+  console.log('⏰ 开始时间:', new Date(generateStartTime).toLocaleTimeString());
+  console.log('📋 当前状态:', {
+    mode: state.mode,
+    prompt: state.prompt,
+    style: state.style,
+    gridSize: `${state.gridSize}x${state.gridSize}`,
+    resolution: state.generateResolution,
+    hasReferenceImage: !!state.referenceImage,
+    baseUrl: state.baseUrl || '默认 API'
+  });
+
   state.isGenerating = true;
   updateUI();
 
@@ -445,20 +459,33 @@ async function handleGenerate() {
 
   try {
     let image;
+    const apiStartTime = Date.now();
+    console.log('🌐 [API 调用] 开始请求 Gemini API...');
+
     if (state.mode === 'text') {
       image = await generateIconGrid(state.apiKey, state.prompt, state.style, state.baseUrl || undefined, state.generateResolution, state.gridSize);
     } else {
       image = await generateIconGridWithReference(state.apiKey, state.referenceImage, state.prompt, state.baseUrl || undefined, state.generateResolution, state.gridSize);
     }
 
+    const apiEndTime = Date.now();
+    console.log(`✅ [API 调用] 完成，耗时: ${((apiEndTime - apiStartTime) / 1000).toFixed(2)}s`);
+    console.log(`📦 [API 调用] 返回图片大小: ${(image.length / 1024).toFixed(2)} KB (Base64)`);
+
     state.resultImage = image;
 
     // 自动切片
+    const sliceStartTime = Date.now();
+    console.log('✂️ [切片] 开始切片处理...');
     showToast('生成成功，正在切片...', false);
     const slices = await sliceImageGrid(image, state.gridSize, state.gridSize);
     state.slices = slices;
+    const sliceEndTime = Date.now();
+    console.log(`✅ [切片] 完成，耗时: ${((sliceEndTime - sliceStartTime) / 1000).toFixed(2)}s，共 ${slices.length} 个切片`);
 
     // 保存到历史
+    const historyStartTime = Date.now();
+    console.log('💾 [历史记录] 开始保存...');
     await addToHistory({
       resultImage: image,
       slices: slices,
@@ -467,11 +494,20 @@ async function handleGenerate() {
       mode: state.mode,
       gridSize: state.gridSize
     });
+    const historyEndTime = Date.now();
+    console.log(`✅ [历史记录] 保存完成，耗时: ${((historyEndTime - historyStartTime) / 1000).toFixed(2)}s`);
 
     displayResult(image, slices);
 
+    const totalTime = (Date.now() - generateStartTime) / 1000;
+    console.log(`🎉 [图标生成] 全部完成！总耗时: ${totalTime.toFixed(2)}s`);
+    console.groupEnd();
+
   } catch (error) {
-    console.error(error);
+    const errorTime = (Date.now() - generateStartTime) / 1000;
+    console.error(`❌ [图标生成] 失败，已用时: ${errorTime.toFixed(2)}s`);
+    console.error('❌ [错误详情]:', error);
+    console.groupEnd();
     showToast(error.message, true);
     elements.placeholderContent.style.display = 'block';
     elements.previewArea.classList.add('empty');
