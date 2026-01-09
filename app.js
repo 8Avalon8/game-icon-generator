@@ -5,6 +5,7 @@
 import { generateIconGrid, generateIconGridWithReference } from './api/gemini.js';
 import { fileToBase64, getDataUrl, isImageFile, sliceImageGrid, createThumbnail, resizeToIcon } from './core/image-utils.js';
 import { checkForUpdates, updateApp, saveCurrentVersion, getCurrentVersion, getLocalVersion } from './core/update-checker.js';
+import { initDB, saveHistoryItem, getAllHistory, clearAllHistory, trimHistory } from './core/history-db.js';
 
 // ============================================================================
 // 常量
@@ -126,9 +127,9 @@ function cacheDOM() {
 // 初始化
 // ============================================================================
 
-function init() {
+async function init() {
   cacheDOM();
-  loadHistory();
+  await loadHistory();  // 等待 IndexedDB 历史加载完成
   bindEvents();
   loadAndDisplayVersion(); // 加载并显示版本
 
@@ -583,7 +584,7 @@ function setImageAsReference(imageBase64) {
 // ============================================================================
 
 /**
- * 添加到历史记录（带本地缓存）
+ * 添加到历史记录（使用 IndexedDB 存储完整图片数据）
  */
 async function addToHistory(item) {
   const thumbnail = await createThumbnail(item.resultImage, 100);
@@ -596,91 +597,87 @@ async function addToHistory(item) {
     style: item.style,
     mode: item.mode,
     gridSize: item.gridSize,
-    resultImage: item.resultImage,  // 完整保存到 localStorage
-    slices: item.slices             // 完整保存到 localStorage
+    resultImage: item.resultImage,
+    slices: item.slices
   };
 
-  // 保存旧的历史记录以便在失败时恢复
-  const previousHistory = [...state.history];
-  
-  // 先添加新项
+  // 添加到内存中的历史记录
   state.history.unshift(historyItem);
   if (state.history.length > MAX_HISTORY) {
     state.history.pop();
   }
 
-  // 尝试保存
-  if (trySaveHistory()) {
-    renderHistoryUI();
-    return;
-  }
-
-  // 存储失败，尝试逐步减少旧记录
-  console.warn('存储空间已满，尝试清理旧记录');
-  
-  // 从保留全部旧记录开始，逐步减少
-  for (let itemsToKeep = previousHistory.length; itemsToKeep >= 0; itemsToKeep--) {
-    state.history = [historyItem, ...previousHistory.slice(0, itemsToKeep)];
-    
-    if (trySaveHistory()) {
-      renderHistoryUI();
-      if (itemsToKeep < previousHistory.length) {
-        showToast(`已保存，清理了部分旧记录（保留 ${state.history.length} 条）`, false);
-      }
-      return;
-    }
-  }
-
-  // 如果只保存新项也失败了，尝试不保存完整图片数据
-  console.error('无法保存历史记录，存储空间严重不足');
-  state.history = [historyItem];
-  renderHistoryUI();
-  showToast('存储空间不足，历史记录可能无法持久保存', true);
-}
-
-/**
- * 尝试保存历史记录，成功返回 true，失败返回 false
- */
-function trySaveHistory() {
+  // 保存到 IndexedDB
   try {
-    const historyData = JSON.stringify(state.history);
-    localStorage.setItem(HISTORY_STORAGE_KEY, historyData);
-    return true;
+    await saveHistoryItem(historyItem);
+    await trimHistory(MAX_HISTORY);
   } catch (e) {
-    return false;
+    console.warn('保存历史记录到 IndexedDB 失败:', e);
   }
+
+  renderHistoryUI();
 }
 
 /**
- * 从 localStorage 加载历史记录
+ * 从 IndexedDB 加载历史记录
  */
-function loadHistory() {
+async function loadHistory() {
   try {
-    const historyData = localStorage.getItem(HISTORY_STORAGE_KEY);
-    if (historyData) {
-      state.history = JSON.parse(historyData);
+    // 初始化 IndexedDB
+    await initDB();
+    
+    // 尝试从 IndexedDB 加载
+    const items = await getAllHistory();
+    
+    if (items.length > 0) {
+      state.history = items;
+      // 清理旧的 localStorage 数据（如果有的话）
+      localStorage.removeItem(HISTORY_STORAGE_KEY);
     } else {
-      state.history = [];
+      // 检查是否有旧的 localStorage 数据需要迁移
+      const oldData = localStorage.getItem(HISTORY_STORAGE_KEY);
+      if (oldData) {
+        try {
+          const oldItems = JSON.parse(oldData);
+          state.history = oldItems;
+          // 迁移到 IndexedDB
+          for (const item of oldItems) {
+            await saveHistoryItem(item);
+          }
+          // 迁移完成后清理 localStorage
+          localStorage.removeItem(HISTORY_STORAGE_KEY);
+          console.log('历史记录已从 localStorage 迁移到 IndexedDB');
+        } catch (e) {
+          console.warn('迁移旧历史记录失败:', e);
+          state.history = [];
+        }
+      } else {
+        state.history = [];
+      }
     }
-    renderHistoryUI();
   } catch (e) {
     console.error('加载历史记录失败:', e);
     state.history = [];
-    renderHistoryUI();
   }
+  
+  renderHistoryUI();
 }
 
 /**
  * 清理历史记录
  */
-function handleClearHistory() {
+async function handleClearHistory() {
   if (!confirm('确定要清除所有历史记录吗？此操作不可恢复。')) {
     return;
   }
 
   try {
-    state.history = [];
+    // 清除 IndexedDB
+    await clearAllHistory();
+    // 清除 localStorage（如果有旧数据）
     localStorage.removeItem(HISTORY_STORAGE_KEY);
+    
+    state.history = [];
     renderHistoryUI();
 
     // 清除当前显示的结果
@@ -706,42 +703,51 @@ function renderHistoryUI() {
   state.history.forEach(item => {
     const div = document.createElement('div');
     div.className = 'history-item';
-    if (state.resultImage === item.resultImage) div.classList.add('active');
+    if (state.resultImage && state.resultImage === item.resultImage) div.classList.add('active');
+
+    // 检查是否有完整图片数据（刷新页面后从 localStorage 加载的记录没有）
+    const hasFullImage = !!item.resultImage;
 
     div.innerHTML = `
       <img src="${item.thumbnail}" title="${item.prompt}">
       <div class="history-actions">
-        <button class="history-btn view-btn">查看</button>
-        <button class="history-btn ref-btn">设为参考</button>
+        ${hasFullImage ? `
+          <button class="history-btn view-btn">查看</button>
+          <button class="history-btn ref-btn">设为参考</button>
+        ` : `
+          <span class="history-hint" title="刷新页面后图片数据已丢失">仅缩略图</span>
+        `}
       </div>
     `;
 
-    // 查看按钮
-    div.querySelector('.view-btn').addEventListener('click', (e) => {
-      e.stopPropagation();
-      state.resultImage = item.resultImage;
-      state.slices = item.slices;
-      state.prompt = item.prompt;
-      state.mode = item.mode;
-      // 兼容旧记录，确保网格大小有效
-      const itemGridSize = item.gridSize || DEFAULT_GRID_SIZE;
-      state.gridSize = ALLOWED_GRID_SIZES.includes(itemGridSize) ? itemGridSize : DEFAULT_GRID_SIZE;
-      elements.promptInput.value = item.prompt;
-      if (elements.gridSizeSelect) {
-        elements.gridSizeSelect.value = state.gridSize.toString();
-      }
+    if (hasFullImage) {
+      // 查看按钮
+      div.querySelector('.view-btn').addEventListener('click', (e) => {
+        e.stopPropagation();
+        state.resultImage = item.resultImage;
+        state.slices = item.slices;
+        state.prompt = item.prompt;
+        state.mode = item.mode;
+        // 兼容旧记录，确保网格大小有效
+        const itemGridSize = item.gridSize || DEFAULT_GRID_SIZE;
+        state.gridSize = ALLOWED_GRID_SIZES.includes(itemGridSize) ? itemGridSize : DEFAULT_GRID_SIZE;
+        elements.promptInput.value = item.prompt;
+        if (elements.gridSizeSelect) {
+          elements.gridSizeSelect.value = state.gridSize.toString();
+        }
 
-      displayResult(item.resultImage, item.slices);
+        displayResult(item.resultImage, item.slices);
 
-      document.querySelectorAll('.history-item').forEach(el => el.classList.remove('active'));
-      div.classList.add('active');
-    });
+        document.querySelectorAll('.history-item').forEach(el => el.classList.remove('active'));
+        div.classList.add('active');
+      });
 
-    // 设为参考图按钮
-    div.querySelector('.ref-btn').addEventListener('click', (e) => {
-      e.stopPropagation();
-      setImageAsReference(item.resultImage);
-    });
+      // 设为参考图按钮
+      div.querySelector('.ref-btn').addEventListener('click', (e) => {
+        e.stopPropagation();
+        setImageAsReference(item.resultImage);
+      });
+    }
 
     elements.historyList.appendChild(div);
   });
