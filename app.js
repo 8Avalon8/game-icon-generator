@@ -599,6 +599,7 @@ async function addToHistory(item) {
     prompt: item.prompt,
     style: item.style,
     mode: item.mode,
+    gridSize: item.gridSize,
     resultImage: item.resultImage,  // 完整保存到 localStorage
     slices: item.slices             // 完整保存到 localStorage
   };
@@ -612,13 +613,16 @@ async function addToHistory(item) {
     renderHistoryUI();
   } catch (e) {
     console.warn('存储空间已满，尝试清理旧记录:', e);
-    // 如果存储失败，逐步减少历史记录数量
+    // 如果存储失败，先移除刚添加的项，然后逐步减少历史记录数量
+    state.history.shift(); // 移除刚才unshift添加的新项
+    
     let maxRetries = 3;
     let itemsToKeep = Math.max(1, Math.floor(state.history.length / 2));
 
     while (maxRetries > 0 && itemsToKeep > 0) {
       try {
-        state.history = [historyItem, ...state.history.slice(0, itemsToKeep - 1)];
+        // 现在正确地重建数组：新项 + 保留的旧项
+        state.history = [historyItem, ...state.history.slice(0, itemsToKeep)];
         saveHistoryToStorage();
         renderHistoryUI();
         showToast(`已保存，清理了部分旧记录（保留 ${state.history.length} 条）`, false);
