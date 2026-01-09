@@ -129,10 +129,7 @@ function bindEvents() {
   if (elements.tabs) {
     elements.tabs.forEach(tab => {
       tab.addEventListener('click', (e) => {
-        elements.tabs.forEach(t => t.classList.remove('active'));
-        e.target.classList.add('active');
-        state.mode = e.target.dataset.mode;
-        updateUI();
+        switchToMode(e.target.dataset.mode);
       });
     });
   }
@@ -199,6 +196,21 @@ function bindEvents() {
 // ============================================================================
 // 逻辑处理
 // ============================================================================
+
+/**
+ * 切换生成模式
+ * @param {string} mode - 'text' | 'style'
+ */
+function switchToMode(mode) {
+  state.mode = mode;
+  
+  // 更新标签页UI
+  elements.tabs.forEach(t => t.classList.remove('active'));
+  const targetTab = Array.from(elements.tabs).find(t => t.dataset.mode === mode);
+  if (targetTab) targetTab.classList.add('active');
+  
+  updateUI();
+}
 
 function updateUI() {
   // 模式切换
@@ -369,19 +381,13 @@ function setImageAsReference(imageBase64) {
   state.referenceImage = imageBase64;
   
   // 切换到风格迁移模式
-  state.mode = 'style';
-  
-  // 更新 UI
-  elements.tabs.forEach(t => t.classList.remove('active'));
-  const styleTab = Array.from(elements.tabs).find(t => t.dataset.mode === 'style');
-  if (styleTab) styleTab.classList.add('active');
+  switchToMode('style');
   
   // 显示参考图预览
   elements.uploadPreview.src = getDataUrl(imageBase64);
   elements.uploadPreview.style.display = 'block';
   elements.uploadPlaceholder.style.display = 'none';
   
-  updateUI();
   showToast('已设置为参考图，当前模式：风格迁移', false);
 }
 
